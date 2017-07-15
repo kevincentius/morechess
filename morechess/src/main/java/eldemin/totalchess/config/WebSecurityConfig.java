@@ -15,18 +15,18 @@
  */
 package eldemin.totalchess.config;
 
-import java.util.Collection;
+import javax.sql.DataSource;
 
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.config.annotation.authentication.builders.AuthenticationManagerBuilder;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.AuthenticationException;
-import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.header.writers.frameoptions.XFrameOptionsHeaderWriter;
 
 /**
@@ -39,6 +39,9 @@ import org.springframework.security.web.header.writers.frameoptions.XFrameOption
 @ComponentScan(basePackages = { "eldemin" })
 public class WebSecurityConfig extends WebSecurityConfigurerAdapter {
 
+	@Autowired
+	private DataSource dataSource;
+
 	@Override
 	protected void configure(HttpSecurity http) throws Exception {
 		http
@@ -46,22 +49,29 @@ public class WebSecurityConfig extends WebSecurityConfigurerAdapter {
 			.headers().addHeaderWriter(
 				new XFrameOptionsHeaderWriter(
 						XFrameOptionsHeaderWriter.XFrameOptionsMode.SAMEORIGIN)).and()
-
+			
 			.formLogin()
-				.defaultSuccessUrl("/index.html")
-				.loginPage("/login.html")
-				.failureUrl("/login.html?error")
-				.permitAll()
-				.and()
+				.loginPage("/login")
+				.usernameParameter("username")
+				.passwordParameter("password")
+				.defaultSuccessUrl("/public/loginSuccess", true)
+				.failureUrl("/public/loginFailed")
+				
+			.and()
 			.logout()
-				.logoutSuccessUrl("/login.html?logout")
-				.logoutUrl("/logout.html")
-				.permitAll()
-				.and()
+				.logoutUrl("/logout")
+				.logoutSuccessUrl("/public/logoutSuccess")
+			
+			.and()
 			.authorizeRequests()
-				.antMatchers("/**").permitAll()
-				.antMatchers("/static/**").permitAll()
-				.antMatchers("/webjars/**").permitAll()
+				.antMatchers("/client/**").permitAll()
+				.antMatchers("/public/**").permitAll()
+				.antMatchers("/login").permitAll()
+				.antMatchers("/logout").permitAll()
+				.antMatchers("/register").permitAll()
+				.antMatchers("/hello").permitAll()
+				
+				.antMatchers("/api/**").authenticated()
 				.anyRequest().authenticated()
 				.and();
 	}
@@ -69,61 +79,17 @@ public class WebSecurityConfig extends WebSecurityConfigurerAdapter {
 
 	@Override
 	protected void configure(AuthenticationManagerBuilder auth) throws Exception {
-		auth.authenticationProvider(new AuthenticationProvider() {
-			
-			@Override
-			public boolean supports(Class<?> arg0) {
-				return true;
-			}
-			
-			@Override
-			public Authentication authenticate(Authentication arg0) throws AuthenticationException {
-				return new Authentication() {
-					
-					@Override
-					public String getName() {
-						return "user-X";
-					}
-					
-					@Override
-					public void setAuthenticated(boolean arg0) throws IllegalArgumentException {
-						// TODO Auto-generated method stub
-						
-					}
-					
-					@Override
-					public boolean isAuthenticated() {
-						return true;
-					}
-					
-					@Override
-					public Object getPrincipal() {
-						// TODO Auto-generated method stub
-						return null;
-					}
-					
-					@Override
-					public Object getDetails() {
-						// TODO Auto-generated method stub
-						return null;
-					}
-					
-					@Override
-					public Object getCredentials() {
-						// TODO Auto-generated method stub
-						return null;
-					}
-					
-					@Override
-					public Collection<? extends GrantedAuthority> getAuthorities() {
-						// TODO Auto-generated method stub
-						return null;
-					}
-				};
-			}
-		});/*
-			.inMemoryAuthentication()
-				.withUser("fabrice").password("fab123").roles("USER").and()
-				.withUser("paulson").password("bond").roles("ADMIN","USER");*/
+		auth
+			.jdbcAuthentication()
+				.dataSource(dataSource)
+				.usersByUsernameQuery("SELECT username, password, enabled FROM user WHERE username=?")
+				.authoritiesByUsernameQuery("SELECT username, role from user_role WHERE username=?")
+				.passwordEncoder(passwordEncoder())
+				;
+	}
+	
+	@Bean
+	public PasswordEncoder passwordEncoder() {
+		return new BCryptPasswordEncoder();
 	}
 }
